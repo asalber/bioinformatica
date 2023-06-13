@@ -1,0 +1,396 @@
+---
+title: Análisis de expresión génica diferencial (RNA-Seq)
+lang: es
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r, echo = F}
+library(tidyverse)
+library(gt)
+library(edgeR)
+library(DESeq2)
+```
+
+El análisis de la expresión génica diferencial (RNA-Seq) es una de las técnicas bioinformáticas que más auge ha experimentado en la última década, ya que permite cuantificar la expresión de un gen a nivel celular y comparar estas expresiones entre distintos grupos experimentales para identificar asociaciones entre genes y factores experimentales (como enfermedades o tratamientos).
+
+El proceso de un análisis genético diferencial tiene distintas etapas, que van desde la obtención del las células a estudiar, pasando por la secuenciación del RNA que contienen, hasta el análisis estadístico de las frecuencias de expresión de cada gen.
+
+![Etapas del análisis de expresión génica diferencial](img/rna-seq-workflow.png)
+
+![](img/rna-seq-workflow-2.png)
+
+En este tutorial nos centraremos en el análisis estadístico de las frecuencias de expresión de los genes. Para ello partiremos de una matriz con las frecuencias o conteos de expresión de cada gen en el conjunto de muestras analizadas. Las filas de esta matriz corresponden a los genes observados y las columnas a las muestras analizadas.
+
+```{r, echo = F}
+library(DEFormats)
+set.seed(123)
+frec <- as.data.frame(simulateRnaSeqData())
+gt(head(frec), rownames_to_stub = T)
+```
+
+La mayor parte de los paquetes de Bioconductor que suelen encapsular esta matriz de frecuencias en un objeto del tipo `SingleCellExperiment`, que además de la matriz de frecuencias de expresión de los genes incluye también los grupos experimentales a los que pertenecen las muestras estudiadas y otra información que se va generando a medida que progresa el análisis.
+
+![El objeto `SingleCellExperiment`](img/SingleCellExperiment.png)
+
+El paquete `SingleCellExperiment` de Bioconductor define esta estructura de datos, y puede instalarse mediante el siguiente código
+
+```r
+BiocManager::install('SingleCellExperiment')
+```
+
+Existen multitud de paquetes en el repositorio Bioconductor para realizar el análisis de expresión génica diferencial. En este tutorial veremos dos de los más usados: `EdgeR` y `DesSeq2`.
+
+## Análisis de expresión génica diferencial con EdgeR
+
+### Estructura de datos
+
+El paquete `EdgeR` utiliza la estructura de datos `DGEList` para guardar la matriz de frecuencias de expresión génica. Para crear esta estructura se utiliza la función
+
+- `DGEList(frec, group = grupo)`: Crea una estructura del tipo `DGEList` con la matriz de frecuencias de expresión génica `frec` (con genes en filas y muestras en columnas) y el vector `grupo` con los grupos experimentales a los que pertenecen las muestras analizadas en las columnas de la matriz de frecuencias.
+
+```{r}
+library(edgeR)
+library(DEFormats)
+frec <- simulateRnaSeqData()
+grupo <- rep(c("A", "B"), each = 3)
+dge <- DGEList(frec, group = grupo)
+dge
+```
+
+Esta estructura de datos es una lista con dos atributos. El atributo `counts` contiene la matriz de frecuencias de expresión génica, y el atributo `samples` es un data frame información sobre las muestras estudiadas. Cada fila de este data frame se corresponde con una columna de la matriz de frecuencias y contiene las siguientes columnas 
+
+|Columna | Descripción |
+|:-|:-|
+| `group` | Grupo experimental al que pertenece la muestra. |
+| `lib.size` | tamaño de la librería (suma de frecuencias de la muestra). | 
+| `norm.factors` | Factor de normalización. |  
+
+La estructura de datos `DGEList` puede contener opcionalmente el atributo `genes` con anotaciones de los genes observados en las filas de la matriz de frecuencias.
+
+Para convertir esta estructura de datos en una del tipo `DESeqDataSet` se puede utilizar la función `as.DESeqDataSet` del paquete `DEFormats`.
+
+```{r}
+dds <- as.DESeqDataSet(dge)
+dds
+```
+
+:::{#exm-edgeR-estructura-datos}
+Veamos cómo crear la estructura de datos correspondiente al estudio de [Sheridan JM, et al. (2015)](https://bmccancer.biomedcentral.com/articles/10.1186/s12885-015-1187-z) donde se obtuvieron datos de tres poblaciones de células (basal, progenitor luminal (LP) y luminal maduro (ML)) seleccionadas de las glándulas mamarias de ratones vírgenes hembra, cada una por triplicado.
+Los datos pueden obtenerse del repositorio [Gene Expression Omnibus (GEO)](http://www.ncbi.nlm.nih.gov/geo/) mediante el identificador GSE63310.
+
+En primer lugar descargamos los ficheros con las librerías de frecuencias.
+
+```{r}
+# Descarga de datos
+url <- "https://www.ncbi.nlm.nih.gov/geo/download/?acc=GSE63310&format=file"
+utils::download.file(url, destfile="datos/GSE63310_RAW.tar", mode="wb") 
+utils::untar("datos/GSE63310_RAW.tar", exdir = "datos")
+files <- paste0("datos/", c("GSM1545535_10_6_5_11.txt", "GSM1545536_9_6_5_11.txt", "GSM1545538_purep53.txt",
+  "GSM1545539_JMS8-2.txt", "GSM1545540_JMS8-3.txt", "GSM1545541_JMS8-4.txt",
+  "GSM1545542_JMS8-5.txt", "GSM1545544_JMS9-P7c.txt", "GSM1545545_JMS9-P8c.txt"))
+#for(i in paste0("datos/", files, ".gz"))
+#  R.utils::gunzip(i, overwrite=TRUE)
+```
+
+A continuación creamos la estructura de datos `DGEList`.
+
+```{r}
+# Creación de la estructura de datos DGEList
+dge <- readDGE(files, columns=c(1,3))
+dge
+```
+
+Añadimos la información del diseño experimental, en este caso el grupo experimental y el lote, al data frame de las muestras.
+
+```{r}
+colnames(dge) <- substring(colnames(dge), 18, nchar(colnames(dge)))
+# Añadimos el grupo experimental
+dge$samples$group <- as.factor(c("LP", "ML", "Basal", "Basal", "ML", "LP", 
+                     "Basal", "ML", "LP"))
+# Añadimos el lote
+dge$samples$lane <- as.factor(rep(c("L004","L006","L008"), c(3,4,2)))
+dge
+```
+
+A continuación anotamos los genes de las filas de la matriz de frecuencias. Para ello debe utilizarse un paquete específico para el genoma de la especie de donde proviene el RNA (`Mus.muculus` en este caso para el genoma del ratón).
+
+```{r, message = F}
+library(Mus.musculus)
+geneid <- rownames(dge)
+genes <- select(Mus.musculus, keys = geneid, columns = c("SYMBOL", "TXCHROM"), keytype = "ENTREZID")
+# Eliminamos duplicidad de algunos genes
+genes <- genes[!duplicated(genes$ENTREZID),]
+dge$genes <- genes
+dge
+```
+:::
+
+### Preprocesamiento
+
+Una vez preparada la estructura de datos, el siguiente paso es el preprocesamiento de datos. Normalmente comprende las siguientes tareas:
+
+a. Normalización de las frecuencias.
+a. Eliminación de los genes con poca expresión.
+a. Normalización de las distribuciones de frecuencias de expresión génicas.
+
+#### Normalización de las frecuencias
+
+El objetivo principal es normalizar las frecuencias de expresión génica para eliminar el efecto sobre las frecuencias de factores como la profundidad de secuenciado (a mayor profundidad de secuenciado mayores frecuencias) o el tamaño de los genes (a mayor tamaño mayores frecuencias). Generalmente se usan las siguientes transformaciones
+
+- Frecuencias por millón (CPM). Se divide cada frecuencia por el tamaño en millones de la librería de la muestra a la que pertenece. Se realiza con la función `cpm(dge)`.
+
+- Logaritmo en base 2 de las frecuencias por millón (log2-CPM). Se calcula a partir de la anterior mediante la fórmula $\log_2(CPM+\frac{2}{L})$, donde $L$ es la longitud media de las librerías en millones. El término $\frac{2}{L}$ que se añade permite calcular el logaritmo para frecuencias nulas (ya que el logaritmo de 0 no existe). Se realiza con la función `cmp(dge, log = TRUE)`. 
+
+- Lecturas por kilobase de transcripción por millón (RPKM): Se realiza con la función `rpkm(dge, longitud_genes)` pasando la longitud de los genes.
+
+- Fragmentos por kilobase de transcripción por millón (FPKM).
+
+Las dos primeras no tienen en cuenta el tamaño de los genes, pero suelen usarse para la expresión génica diferencial donde el tamaño de los genes se supone constante en las distintas muestras.
+
+:::{#exm-edgeR-preprocesamiento}
+Siguiendo con el ejemplo anterior, calculamos las frecuencias por millón y el logaritmo de las frecuencias por millón. 
+
+```{r}
+cpm <- cpm(dge)
+summary(cpm)
+lcpm <- cpm(dge, log = TRUE)
+summary(lcpm)
+```
+:::
+
+#### Eliminación de genes con poca expresión
+
+Aunque el objetivo del análisis de la expresión génica diferencial es detectar los genes que se expresan en un grupo experimental en comparación con los otros, cuando un gen no se expresa en ninguna de las muestras no tiene interés para el estudio y puede eliminarse.
+
+Existen diferentes criterios para eliminar los genes con poca expresión. El paquete `EdgeR` incorpora la siguiente función
+
+- `filterByExpr(dge)`: Realiza un filtro de la estructura de datos `dge` los genes con poca expresión. Por defecto devuelve `TRUE` para cualquier gen con una frecuencia mayor o igual que 10 en al menos un número de muestras igual al del menor grupo experimental.
+
+:::{#exm-edgeR-eliminacion-genes-poco-expresados}
+Veamos cuántos genes no tienen expresión en ninguna muestra del ejemplo anterior.
+
+```{r}
+# Número de genes con expresión nula.
+table(rowSums(dge$counts) == 0)
+```
+
+El siguiente gráfico muestra la distribución del logaritmo en base 2 de las frecuencias por millón.
+
+```{r}
+# Definimos una función para dibujar la distribución del logaritmo de las frecuencias por millón.
+dist_logcpm <- function(lcpm) {
+lcpm |> 
+    as.tibble()  |>
+    pivot_longer(everything(), names_to = "Muestra", values_to = "LogCPM") |>
+    ggplot(aes(x = LogCPM, color = Muestra)) +
+    geom_density() +
+    labs(title = "Distribución del logaritmo en base 2 de las frecuencias por millón")
+}
+
+dist_logcpm(lcpm)
+```
+
+Como se observa ha una porcentaje significativo de genes que tiene una expresión muy baja (valores negativos).
+
+A continuación eliminamos de la estructura de datos los genes con poca expresión.
+
+```{r}
+filtro <- filterByExpr(dge)
+dge <- dge[filtro, , keep.lib.sizes = F]
+dge
+```
+
+```{r}
+lcpm <- cpm(dge, log = TRUE)
+dist_logcpm(lcpm)
+```
+:::
+
+
+#### Normalización de las distribuciones de frecuencias de expresión génicas
+
+Durante el proceso de secuenciación puede haber factores externos no biológicos que afecten a la expresión de los genes. Por ejemplo, la muestras del primer lote pueden tener mayores frecuencias que las del segundo lote. Como se supone que las muestras replicadas deben tener un rango y una distribución de frecuencias similares, en esta etapa se aplica otro procedimiento de normalización para garantizar que la distribución de frecuencias de cada muestra es similar. Para ello el paquete `edgeR` utiliza el [método de las medias recortadas de los valores M](https://pubmed.ncbi.nlm.nih.gov/20196867/) por medio de la función 
+
+- `calcNormFactors(dge, method = "TMM")`: Calcular los factores de escalado del tamaño de las librerías de cada muestra. Estos factores se guardan automáticamente en el data frame con la información de las muestras `dge$samples`.
+
+:::{#exm-edgeR-factores-escalado-tamaño-librerias}
+Siguiendo con el mismo ejemplo, calculamos los factores de escalado para cada muestra.
+
+```{r}
+dge <- calcNormFactors(dge, method = "TMM")
+dge$samples$norm.factors
+```
+
+A continuación se muestran los diagramas de cajas de las distribuciones normalizadas tras aplicar los factores de escalado.
+
+```{r}
+box_logcpm <- function(lcpm){
+lcpm |> 
+    as.tibble()  |>
+    pivot_longer(everything(), names_to = "Muestra", values_to = "LogCPM") |>
+    ggplot(aes(x = Muestra, y = LogCPM, fill = Muestra)) +
+    geom_boxplot() +
+    labs(title = "Distribución del logaritmo en base 2 de las frecuencias por millón")
+}
+
+box_logcpm(lcpm)
+```
+
+Como se puede apreciar, después de la normalización, todas las muestras presentan una distribución de frecuencias similar.
+:::
+
+### Análisis exploratorio
+
+Una vez preprocesados los datos comienza el análiss estadístico propiamente dicho. En una primera fase se suele realizar un análisis exploratorio de los datos que suele incluir los siguientes análisis:
+
+- Escalado multidimensional (análisis de componentes principales).
+
+
+#### Escalado multidimensional
+
+El escalado multidimensional mediante componente principales permite ver qué muestras son similares en cuando a la distribución de frecuencias de expresión génica. Los componentes principales son combinaciones lineales de los genes de la matriz de frecuencias que son ortogonales entre sí. El primer componente principal recoge la dimensión con mayor variabilidad de las frecuencias. El segundo recoge la dimensión don la mayor variabilidad no explicada por el primer componente principal y así sucesivamente. Normalmente los dos primeros componentes principales suelen recoger un porcentaje bastante alto de la variabilidad de las frecuencias. Al representar las muestras en estas dos dimensiones, las muestras más próximas entre sí, presentan una distribución de frecuencias de expresión génica similar. Para realizar esta representación se puede utilizar la siguiente función del paquete `limma`:
+
+- `plotMDS(dge): Realiza un diagrama de componentes principales de la matriz de frecuencias de la estructura de datos `dge`. 
+
+Alternativamente, se pueden calcular los componentes principales mediante la función `prcomp` del paquete `stats` y luego usar la función `autoplot` del paquete `ggfortify` para dibujar el diagrama de componentes principales.
+
+:::{#exm-componentes-principales}
+A continuación se muestra cómo obtener el diagrama de componentes principales de la matriz de frecuencias de nuestro ejemplo.
+
+```{r}
+plotMDS(dge, col = as.numeric(dge$samples$group), main = "Diagrama de componentes principales del logaritmo en base 2 de las frecuencias por millón")
+```
+
+```{r}
+library(ggfortify)
+autoplot(prcomp(t(lcpm)), data = dge$samples, color = "group", loadings = TRUE, loadings.label = TRUE) +
+labs(title = "Diagrama de componentes principales del logaritmo en base 2 de las frecuencias por millón")
+```
+
+Como se puede apreciar las muestras de cada grupo experimental aparecen agrupadas. La mayor diferencia (a lo largo del primer componente principal) se da entre el grupo basal y los otros dos grupos. Esto indica que cuando se realice el análisis de expresión génica diferencial habrá bastantes genes con diferencias de expresión significativa entre el grupo basal y los otros dos, mientras que no habrá tantos al comparar los grupos LP y ML. 
+:::
+
+Otra opción muy interesante es el paquete `Glimma` que permite dibujar un diagrama de componentes principales interactivo mediante la función
+
+- `glMDSPlot(lcpm)`: Dibuja un diagrama de componentes principales interactivo de la matriz de frecuencias `lcpm`.
+
+```{r}
+library(Glimma)
+#glMDSPlot(lcpm, groups = dge$samples[,c(2,5)])
+dds <- DESeqDataSetFromMatrix(
+  countData = dge$counts,
+  colData = dge$samples,
+  rowData = dge$genes,
+  design = ~group
+)
+glimmaMDS(dds)
+```
+
+### Análisis de expresión génica diferencial
+
+La última etapa del análisis es la detección de los genes con una expresión significativamente diferente entre los grupos experimentales. Para ello se suelen utilizar modelos lineales o modelos lineales generalizados. En general, la estimación de los parámetros del modelo ajustado depende de la distribución teórica usada para modelizar las frecuencias de expresión génica. El paquete `limma`, por ejemplo, realiza un ajuste de modelo lineal suponiendo que las distribuciones de las variables implicadas son normales, mientras que el paquete `edgeR` modeliza las frecuencias de expresión de los genes observadas mediante la distribución binomial negativa.
+
+El primer paso es definir la matriz del diseño del experimento, que define los grupos experimentales a comparar.
+
+```{r}
+diseño <- model.matrix(~ 0 + dge$samples$group + dge$samples$lane)
+colnames(diseño) <- gsub("dge\\$samples\\$group", "", colnames(diseño))
+colnames(diseño) <- gsub("dge\\$samples\\$", "", colnames(diseño))
+diseño
+```
+
+Para definir los contrastes de ajuste por pares, el paquete `limma` utiliza la función
+
+- `makeContrast(pares)`
+
+```{r}
+contr.matrix <- makeContrasts(
+   BasalvsLP = Basal-LP, 
+   BasalvsML = Basal - ML, 
+   LPvsML = LP - ML, 
+   levels = colnames(diseño))
+contr.matrix
+```
+
+En general en las distribuciones de frecuencias de expresión génica, se ha observado que la varianza no es independiente de la media. Los métodos que modelizan las frecuencias mediante el modelo binomial negativo asumen una relación cuadrática entre la media y la varianza. Con el paquete `limma` el ajuste lineal se realiza sobre el logaritmo en base 2 de las frecuencias por millón (log-CPM) que se suponen tienen una distribución normal. La relación entre la media y la varianza se realiza automáticamente mediante la función `voom`.
+
+```{r}
+par(mfrow=c(1,2))
+v <- voom(dge, diseño, plot=TRUE)
+v
+vfit <- lmFit(v, diseño)
+vfit <- contrasts.fit(vfit, contrasts=contr.matrix)
+efit <- eBayes(vfit)
+plotSA(efit, main="Final model: Mean-variance trend")
+```
+
+A partir del modelo estimado se pueden obtener los genes subexpresados y sobreexpresados mediante el p-valor ajustado, tomando un nivel de significación del 5%.
+
+
+```{r}
+summary(decideTests(efit))
+```
+
+Para la comparación entre los niveles de expresión en basal y LP, se encontró que 4648 genes están regulados negativamente en basal en relación con LP y 4.863 genes están regulados al alza en basal en relación con LP, un total de 9.511 genes significativamente diferenciados. Por otro lado, hay un total de 9598 genes significativamente diferenciados entre basal y ML (4927 genes regulados negativamente y 4671 regulados positivamente), y un total de 5652 genes significativamente diferenciados entre LP y ML (3135 regulados negativamente y 2517 regulados positivamente).
+
+En algunos análisis se puede ser más conservador utilizando el log-fold-change (log-FC).
+
+```{r}
+tfit <- treat(vfit, lfc=1)
+dt <- decideTests(tfit)
+summary(dt)
+```
+
+Para terminar se pueden mostrar los genes con diferencias más significativas.
+
+```{r}
+basal.vs.lp <- topTreat(tfit, coef=1, n=Inf)
+head(basal.vs.lp)
+basal.vs.ml <- topTreat(tfit, coef=2, n=Inf)
+head(basal.vs.ml)
+```
+
+```{r}
+glimmaMA(tfit, coef=1, status=dt, main=colnames(tfit)[1],
+         side.main="ENTREZID", counts=lcpm, groups=dge$samples$group)
+```
+
+El mismo ajuste se puede realizar con el paquete `edgeR`.
+
+```{r}
+dge <- estimateDisp(dge, diseño)
+gfit <- glmFit(dge, diseño)
+glrt <- glmLRT(gfit, diseño, contrast = contr.matrix)
+```
+
+```{r}
+#glimmaMA(glrt, dge = dge)
+```
+
+Y el volcano plot
+
+```{r}
+glimmaVolcano(efit, dge = dge)
+```
+
+## Análisis de expresión génica diferencial con DesSeq2
+
+El paquete `DESeq2` utiliza la estructura de datos `DESeqDataSet` para guardar la matriz de frecuencias de expresión génica. Para crear esta estructura se pueden utilizar las siguientes funciones 
+
+- `DESeqDataSetFromMatrix(countData = frec, colData = grupo)`: Crea una estructura del tipo `DESeqDataSet` con la matriz de frecuencias de expresión génica `frec` (con genes en filas y muestras en columnas), y el data frame `grupo` con los grupos experimentales a los que pertenecen las muestras analizadas en las columnas de la matriz de frecuencias.
+
+```{r, message = F}
+#library(DESeq2)
+#dds <- DESeqDataSetFromMatrix(countData = frec, colData = dge$samples$group, design = ~ group)
+#dds
+```
+
+
+## Referencias
+
+- Orchestrating Single-Cell Analysis with Bioconductor. (s. f.). Recuperado 12 de junio de 2023, de https://github.com/LTLA/OSCA
+
+- Law, Charity, et al. [RNA-seq analysis is easy as 1-2-3 with limma, Glimma and edgeR](https://bioconductor.org/packages/release/workflows/vignettes/RNAseq123/inst/doc/limmaWorkflow.html).
