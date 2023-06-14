@@ -16,13 +16,39 @@ library(DESeq2)
 
 El análisis de la expresión génica diferencial (RNA-Seq) es una de las técnicas bioinformáticas que más auge ha experimentado en la última década, ya que permite cuantificar la expresión de un gen a nivel celular y comparar estas expresiones entre distintos grupos experimentales para identificar asociaciones entre genes y factores experimentales (como enfermedades o tratamientos).
 
-El proceso de un análisis genético diferencial tiene distintas etapas, que van desde la obtención del las células a estudiar, pasando por la secuenciación del RNA que contienen, hasta el análisis estadístico de las frecuencias de expresión de cada gen.
+El proceso de un análisis genético diferencial tiene distintas etapas, que van desde la obtención del las células a estudiar, pasando por la secuenciación del RNA que contienen, hasta el análisis estadístico de estas frecuencias para determinar el nivel de expresión de cada gen y la comparación entre los grupos experimentales.
 
 ![Etapas del análisis de expresión génica diferencial](img/rna-seq-workflow.png)
 
 ![](img/rna-seq-workflow-2.png)
 
-En este tutorial nos centraremos en el análisis estadístico de las frecuencias de expresión de los genes. Para ello partiremos de una matriz con las frecuencias o conteos de expresión de cada gen en el conjunto de muestras analizadas. Las filas de esta matriz corresponden a los genes observados y las columnas a las muestras analizadas.
+En este tutorial nos centraremos en el análisis estadístico de las frecuencias de expresión de los genes, que normalmente requiere las siguientes etapas:
+
+1.  Creación de la estructura de datos con las frecuencias de expresión génica.
+
+1.  Preprocesamiento de datos.
+
+1.  Análisis exploratorio de los datos.
+
+1.  Análisis de expresión génica diferencial.
+
+1.  Visualización de resultados.
+
+
+Existen multitud de paquetes en el repositorio Bioconductor para realizar el análisis de expresión génica diferencial. En este tutorial veremos dos de los más usados: `EdgeR` y `DesSeq2`.
+
+## Análisis de expresión génica diferencial con `edgeR`
+
+El paquete [`edgeR`](https://bioconductor.org/packages/release/bioc/html/edgeR.html) es uno de los principales paquetes usados para el análisis de expresión génica diferencial que incorpora funciones para todas las etapas del análisis estadístico. Está disponible en el repositorio [Bioconductor](https://bioconductor.org/).
+
+A continuación se explica cómo realizar las distintas etapas del análisis estadístico con este paquete.
+
+### Estructura de datos
+
+El análisis estadístico comienza siempre a partir de la matriz con las frecuencias o conteos de expresión de cada gen en el conjunto de muestras analizadas. Las filas de esta matriz corresponden a los genes observados y las columnas a las muestras analizadas.
+
+:::{#exm-matriz-frecuencias-expresion-genes}
+A continuación se muestran las primeras filas de una matriz de frecuencias de expresión génica. Cada casilla recoge el número de veces que el gen de la fila correspondiente se ha observado en la muestra de la columna correspondiente. 
 
 ```{r, echo = F}
 library(DEFormats)
@@ -30,22 +56,9 @@ set.seed(123)
 frec <- as.data.frame(simulateRnaSeqData())
 gt(head(frec), rownames_to_stub = T)
 ```
+:::
 
-La mayor parte de los paquetes de Bioconductor que suelen encapsular esta matriz de frecuencias en un objeto del tipo `SingleCellExperiment`, que además de la matriz de frecuencias de expresión de los genes incluye también los grupos experimentales a los que pertenecen las muestras estudiadas y otra información que se va generando a medida que progresa el análisis.
-
-![El objeto `SingleCellExperiment`](img/SingleCellExperiment.png)
-
-El paquete `SingleCellExperiment` de Bioconductor define esta estructura de datos, y puede instalarse mediante el siguiente código
-
-```r
-BiocManager::install('SingleCellExperiment')
-```
-
-Existen multitud de paquetes en el repositorio Bioconductor para realizar el análisis de expresión génica diferencial. En este tutorial veremos dos de los más usados: `EdgeR` y `DesSeq2`.
-
-## Análisis de expresión génica diferencial con EdgeR
-
-### Estructura de datos
+La mayor parte de los paquetes de Bioconductor que suelen encapsular esta matriz de frecuencias en un objeto del tipo 
 
 El paquete `EdgeR` utiliza la estructura de datos `DGEList` para guardar la matriz de frecuencias de expresión génica. Para crear esta estructura se utiliza la función
 
@@ -277,6 +290,9 @@ Otra opción muy interesante es el paquete `Glimma` que permite dibujar un diagr
 
 - `glMDSPlot(lcpm)`: Dibuja un diagrama de componentes principales interactivo de la matriz de frecuencias `lcpm`.
 
+:::{#exm-edgeR-glimma-componentes-princiaples}
+A continuación se muestra cómo obtener el diagrama de componentes principales para nuestro ejemplo con el paquete `Glimma`.
+
 ```{r}
 library(Glimma)
 #glMDSPlot(lcpm, groups = dge$samples[,c(2,5)])
@@ -288,6 +304,7 @@ dds <- DESeqDataSetFromMatrix(
 )
 glimmaMDS(dds)
 ```
+:::
 
 ### Análisis de expresión génica diferencial
 
@@ -330,6 +347,7 @@ plotSA(efit, main="Final model: Mean-variance trend")
 A partir del modelo estimado se pueden obtener los genes subexpresados y sobreexpresados mediante el p-valor ajustado, tomando un nivel de significación del 5%.
 
 
+:::{#exm-edgeR-resumen-genes-significativos}
 ```{r}
 summary(decideTests(efit))
 ```
@@ -352,7 +370,15 @@ head(basal.vs.lp)
 basal.vs.ml <- topTreat(tfit, coef=2, n=Inf)
 head(basal.vs.ml)
 ```
+:::
 
+### Visualización de resultados
+
+Una vez realizado en análisis de expresión génica diferencial, la última etapa consiste den mostrar los resultados del análisis de manera comprensible. Para ello se utilizan distintos tipos diagramas. Los más importantes se presentan a continuación.
+
+#### Diagrama MA
+
+:::{#exm-diagrama-MA}
 ```{r}
 glimmaMA(tfit, coef=1, status=dt, main=colnames(tfit)[1],
          side.main="ENTREZID", counts=lcpm, groups=dge$samples$group)
@@ -369,25 +395,114 @@ glrt <- glmLRT(gfit, diseño, contrast = contr.matrix)
 ```{r}
 #glimmaMA(glrt, dge = dge)
 ```
+:::
 
-Y el volcano plot
+#### Diagrama de volcán
+
+Este diagrama muestra la significación estadística y la magnitud (relevancia biológica) de los cambios en los niveles de expresión de los genes en dos o más grupos experimentales comparados.
+
+En un diagrama de volcán, cada punto representa un gen, y su posición en el gráfico está determinada por dos factores: la diferencia de expresión entre los grupos experimentales y la significaciónestadística. La diferencia de expresión se da mediante el logaritmo de la razón de frecuncias entre el grupo experimental y el grupo control (log-fold change), y la significancia estadística se representa como el logaritmo negativo en base 10 del p-valor derivado de una prueba estadística, como una prueba t o un análisis de varianza (ANOVA).
+
+El eje x del diagrama de volcán representa el cambio de plegamiento, con puntos a la derecha que indican una regulación al alza y puntos a la izquierda que indican una regulación a la baja. El eje y representa la significancia estadística, con puntos en la parte superior que indican una mayor significancia. Por lo tanto, los genes o proteínas diferencialmente expresados más significativos aparecerán en la parte superior del gráfico y más alejados del centro, asemejándose a la forma de un volcán.
+
+Para realizar este diagrama se puede usar la siguiente función del paquete `Glimma`
+
+- `glimmaVolcano(fit, dge = dge)`: Realiza diagrama de volcán del modelo ajustado `fit` sobre la estructura de datos `dge`.
+
+:::{#exm-edgeR-diagrama-volcan}
+A continuación se muestra cómo realizar un diagrama de volcán para nuestro ejemplo.
 
 ```{r}
 glimmaVolcano(efit, dge = dge)
 ```
+:::
 
-## Análisis de expresión génica diferencial con DesSeq2
+## Análisis de expresión génica diferencial con `DESeq2`
 
-El paquete `DESeq2` utiliza la estructura de datos `DESeqDataSet` para guardar la matriz de frecuencias de expresión génica. Para crear esta estructura se pueden utilizar las siguientes funciones 
+El paquete [`DESeq2`](https://bioconductor.org/packages/release/bioc/html/DESeq2.html) es otro de los paquetes más utilizados para el análisis de la expresión génica diferencial, que al igual que `edgeR` incorpora procedimientos para todas las etapas del análisis. También está disponible en el repositorio [Bioconductor](https://bioconductor.org/).
 
-- `DESeqDataSetFromMatrix(countData = frec, colData = grupo)`: Crea una estructura del tipo `DESeqDataSet` con la matriz de frecuencias de expresión génica `frec` (con genes en filas y muestras en columnas), y el data frame `grupo` con los grupos experimentales a los que pertenecen las muestras analizadas en las columnas de la matriz de frecuencias.
+### Estructura de Datos
 
-```{r, message = F}
-#library(DESeq2)
-#dds <- DESeqDataSetFromMatrix(countData = frec, colData = dge$samples$group, design = ~ group)
-#dds
+El paquete `DESeq2` utiliza la estructura de datos `DESeqDataSet` para guardar la matriz de frecuencias de expresión génica. Esta estructura se deriva, a su vez, de la estructura `SingleCellExperiment`, que además de la matriz de frecuencias de expresión de los genes incluye también los grupos experimentales a los que pertenecen las muestras estudiadas y otra información que se va generando a medida que progresa el análisis.
+
+![El objeto `SingleCellExperiment`](img/SingleCellExperiment.png)
+
+El paquete [`SingleCellExperiment`](https://www.bioconductor.org/packages/release/bioc/html/SingleCellExperiment.html) de Bioconductor define esta estructura de datos, y puede instalarse mediante el siguiente código
+
+```r
+BiocManager::install('SingleCellExperiment')
 ```
 
+Para crear la estructura de datos `DESeqDataSet` se utiliza la siguiente función
+
+- `DESeqDataSetFromMatrix(countData = frec, colData = grupo, design = diseño)`: Crea una estructura del tipo `DESeqDataSet` con la matriz de frecuencias de expresión génica `frec` (con genes en filas y muestras en columnas), y el data frame `grupo` con los grupos experimentales a los que pertenecen las muestras analizadas en las columnas de la matriz de frecuencias y la columna `diseño` del data frame `grupo` que contiene los grupos experimentales a comparar.
+
+```{r, message = F}
+library(DESeq2)
+dds <- DESeqDataSetFromMatrix(
+  countData = dge$counts,
+  colData = dge$samples,
+  rowData = dge$genes,
+  design = ~group
+)
+dds
+```
+
+### Preprocesamiento
+
+El paquete `DESeq2` realiza el preprocesamiento de maneare automática cuando se lanza el procedimiento para el análisis de expresión génica diferencial.
+
+### Análisis exploratorio
+
+### Escalado multidimensional 
+
+Al igual que antes, el principal análisis exploratorio es el escalado multidimensional. Para realizarlo podemos usar de nuevo la siguiente función del plaqute `Glimma`.
+
+- `glimmaMDS(dds)`: Realiza un diagrama interactivo de componenetes principales a partir de la estructura de datos `dds`.
+
+:::{#exm-DESeq2-glimma-componentes-princiaples}
+A continuación se muestra cómo obtener el diagrama de componentes principales para nuestro ejemplo con el paquete `Glimma`.
+
+```{r}
+library(Glimma)
+glimmaMDS(dds)
+```
+:::
+
+### Análisis de expresión génica diferencial
+
+Para realizar el análisis de expresión génica diferencial el paquete `DESeq2` utiliza la siguiente función
+
+- `DESeq(dds)`: Realiza el preprocesamiento de datos y el ajuste del modelo para el análisis de expresión génica diferencial de la estructura de datos `dds`.
+
+
+:::{#exm-DESeq2-analisis-expresion-genica-diferencial}
+A continuación se muestra cómo realizar el análisis de expresión génica diferencial para nuestro ejemplo.
+
+```{r}
+dds <- DESeq(dds)
+dds
+```
+:::
+
+### Visualización de datos
+
+
+#### Diagrama MA
+
+:::{#exm-DESeq2-diagrama-MA}
+```{r}
+glimmaMA(dds)
+```
+:::
+
+#### Diagrama de volcán
+
+:::{#exm-DESeq2-diagrama-volcan}
+```{r}
+glimmaVolcano(dds)
+```
+:::
 
 ## Referencias
 
