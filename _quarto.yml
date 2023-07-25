@@ -38,6 +38,7 @@ book:
   chapters:
     - index.qmd
     - 01-rna-seq.qmd
+    - diagrama-volcan.qmd
     
 #bibliography: references.bib
 

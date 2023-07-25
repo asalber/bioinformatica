@@ -1,0 +1,45 @@
+
+### Visualización de resultados
+
+Una vez realizado en análisis de expresión génica diferencial, la última etapa consiste den mostrar los resultados del análisis de manera comprensible. Para ello se utilizan distintos tipos diagramas. Los más importantes se presentan a continuación.
+
+#### Diagrama MA
+
+:::{#exm-diagrama-MA}
+```{r}
+glimmaMA(tfit, coef=1, status=dt, main=colnames(tfit)[1],
+         side.main="ENTREZID", counts=lcpm, groups=dge$samples$group)
+```
+
+El mismo ajuste se puede realizar con el paquete `edgeR`.
+
+```{r}
+dge <- estimateDisp(dge, diseño)
+gfit <- glmFit(dge, diseño)
+glrt <- glmLRT(gfit, diseño, contrast = contr.matrix)
+```
+
+```{r}
+#glimmaMA(glrt, dge = dge)
+```
+:::
+
+#### Diagrama de volcán
+
+Este diagrama muestra la significación estadística y la magnitud (relevancia biológica) de los cambios en los niveles de expresión de los genes en dos o más grupos experimentales comparados.
+
+En un diagrama de volcán, cada punto representa un gen, y su posición en el gráfico está determinada por dos factores: la diferencia de expresión entre los grupos experimentales y la significaciónestadística. La diferencia de expresión se da mediante el logaritmo de la razón de frecuncias entre el grupo experimental y el grupo control (log-fold change), y la significancia estadística se representa como el logaritmo negativo en base 10 del p-valor derivado de una prueba estadística, como una prueba t o un análisis de varianza (ANOVA).
+
+El eje x del diagrama de volcán representa el cambio de plegamiento, con puntos a la derecha que indican una regulación al alza y puntos a la izquierda que indican una regulación a la baja. El eje y representa la significancia estadística, con puntos en la parte superior que indican una mayor significancia. Por lo tanto, los genes o proteínas diferencialmente expresados más significativos aparecerán en la parte superior del gráfico y más alejados del centro, asemejándose a la forma de un volcán.
+
+Para realizar este diagrama se puede usar la siguiente función del paquete `Glimma`
+
+- `glimmaVolcano(fit, dge = dge)`: Realiza diagrama de volcán del modelo ajustado `fit` sobre la estructura de datos `dge`.
+
+:::{#exm-edgeR-diagrama-volcan}
+A continuación se muestra cómo realizar un diagrama de volcán para nuestro ejemplo.
+
+```{r}
+glimmaVolcano(efit, dge = dge)
+```
+:::

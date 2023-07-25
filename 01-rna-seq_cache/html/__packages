@@ -13,16 +13,12 @@ DEFormats
 limma
 edgeR
 BiocGenerics
+Biobase
 S4Vectors
 IRanges
+AnnotationDbi
 GenomeInfoDb
 GenomicRanges
-matrixStats
-MatrixGenerics
-Biobase
-SummarizedExperiment
-DESeq2
-AnnotationDbi
 GenomicFeatures
 OrganismDbi
 GO.db
@@ -30,4 +26,8 @@ org.Mm.eg.db
 TxDb.Mmusculus.UCSC.mm10.knownGene
 Mus.musculus
 ggfortify
+matrixStats
+MatrixGenerics
+SummarizedExperiment
+DESeq2
 Glimma
