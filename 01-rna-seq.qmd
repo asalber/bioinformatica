@@ -56,7 +56,7 @@ gt(head(frec), rownames_to_stub = T)
 ```
 :::
 
-El paquete `EdgeR` utiliza la estructura de datos `DGEList` para guardar la matriz de frecuencias de expresión génica. Para crear esta estructura se utiliza la función
+El paquete `edgeR` utiliza la estructura de datos `DGEList` para guardar la matriz de frecuencias de expresión génica. Para crear esta estructura se utiliza la función
 
 - `DGEList(frec, group = grupo)`: Crea una estructura del tipo `DGEList` con la matriz de frecuencias de expresión génica `frec` (con genes en filas y muestras en columnas) y el vector `grupo` con los grupos experimentales a los que pertenecen las muestras analizadas en las columnas de la matriz de frecuencias.
 
@@ -79,13 +79,6 @@ Esta estructura de datos es una lista con dos atributos. El atributo `counts` co
 
 La estructura de datos `DGEList` puede contener opcionalmente el atributo `genes` con anotaciones de los genes observados en las filas de la matriz de frecuencias.
 
-Para convertir esta estructura de datos en una del tipo `DESeqDataSet` se puede utilizar la función `as.DESeqDataSet` del paquete `DEFormats`.
-
-```{r}
-library(DESeq2)
-dds <- as.DESeqDataSet(dge)
-dds
-```
 
 :::{#exm-edgeR-estructura-datos}
 Veamos cómo crear la estructura de datos correspondiente al estudio de [Sheridan JM, et al. (2015)](https://bmccancer.biomedcentral.com/articles/10.1186/s12885-015-1187-z) donde se obtuvieron datos de tres poblaciones de células (basal, progenitor luminal (LP) y luminal maduro (ML)) seleccionadas de las glándulas mamarias de ratones vírgenes hembra, cada una por triplicado.
@@ -298,6 +291,7 @@ A continuación se muestra cómo obtener el diagrama de componentes principales 
 
 ```{r}
 library(Glimma)
+library(DESeq2)
 #glMDSPlot(lcpm, groups = dge$samples[,c(2,5)])
 dds <- DESeqDataSetFromMatrix(
   countData = dge$counts,
@@ -494,7 +488,7 @@ plotMD(glmQL_LP_ML)
 ```
 :::
 
-### Diagrama de volcán
+#### Diagrama de volcán
 
 Un diagrama de volcán es una representación gráfica utilizada en Bioinformática para visualizar los resultados del análisis de expresión génica diferencial u otros tipos de análisis de datos ómicos de alto rendimiento, como Proteómica o Metabolómica.
 
@@ -552,6 +546,9 @@ Para crear la estructura de datos `DESeqDataSet` se utiliza la siguiente funció
 
 - `DESeqDataSetFromMatrix(countData = frec, colData = grupo, design = diseño)`: Crea una estructura del tipo `DESeqDataSet` con la matriz de frecuencias de expresión génica `frec` (con genes en filas y muestras en columnas), y el data frame `grupo` con los grupos experimentales a los que pertenecen las muestras analizadas en las columnas de la matriz de frecuencias y la columna `diseño` del data frame `grupo` que contiene los grupos experimentales a comparar.
 
+:::{#exm-deseq2-carga-datos}
+Siguiendo con el mismo ejemplo de la sección anterior, podemos aprovechar la estructura de datos `DGEList` creada durante el análisis génico diferencial con el paquete `edgeR` para crear a partir de ella la estructura de datos `DESeqDataSet` que requiere el paquete `DESeq2`.
+
 ```{r, message = F}
 library(DESeq2)
 dds <- DESeqDataSetFromMatrix(
@@ -562,6 +559,52 @@ dds <- DESeqDataSetFromMatrix(
 )
 dds
 ```
+:::
+
+Si disponemos de los datos en el formato de la estructura de datos `DGEList`, es fácil convertirlos al formato de la estructura de datos `DESeqDataSet` mediante la función `as.DESeqDataSet` del paquete `DEFormats`.
+
+- `as.DESeqDataSet(dge)`: Devuelve una estructura de datos del tipo `DESeqDataSet` con los datos de la estructura de datos `DGEList` dada en `dge`.
+
+:::{#exm-deseq2-carga-datos2}
+```{r}
+library(DEFormats)
+dds <- as.DESeqDataSet(dge)
+dds
+```
+:::
+
+Una vez creada la estructura de datos, podemos acceder a la información de las muestras con la función
+
+- `colData(dds)`: Devuelve un data frame con la información de las muestras (columnas) de la estructura de datos en formato `DESEqDataSet` dada en `dds`.
+
+Y a la información de los genes con la función
+
+- `rowData(dds)`: Devuelve un data frame con la información de los genes (filas) de la estructura de datos en formato `DESEqDataSet` dada en `dds`.
+
+También podemos mostrar el diseño experimental con la función
+
+- `design(dds)`: Devuelve la fórmula del diseño experimental de la estructura de datos en formato `DESEqDataSet` dada en `dds`.
+
+:::{#exm-deseq2-datos-muestras-genes}
+
+Mostramos la información de las muestras del ejemplo.
+
+```{r}
+colData(dds)
+```
+
+A continuación, mostramos la información de los genes.
+
+```{r}
+rowData(dds)
+```
+
+Y finalmente mostramos el diseño.
+
+```{r}
+design(dds)
+```
+:::
 
 ### Preprocesamiento
 
@@ -571,7 +614,7 @@ El paquete `DESeq2` realiza el preprocesamiento de maneare automática cuando se
 
 ### Escalado multidimensional 
 
-Al igual que antes, el principal análisis exploratorio es el escalado multidimensional. Para realizarlo podemos usar de nuevo la siguiente función del plaqute `Glimma`.
+Al igual que antes, el principal análisis exploratorio es el escalado multidimensional. Para realizarlo podemos usar de nuevo la siguiente función del paquete `Glimma`.
 
 - `glimmaMDS(dds)`: Realiza un diagrama interactivo de componenetes principales a partir de la estructura de datos `dds`.
 
@@ -588,20 +631,58 @@ glimmaMDS(dds)
 
 Para realizar el análisis de expresión génica diferencial el paquete `DESeq2` utiliza la siguiente función
 
-- `DESeq(dds)`: Realiza el preprocesamiento de datos y el ajuste del modelo para el análisis de expresión génica diferencial de la estructura de datos `dds`.
+- `DESeq(dds)`: Realiza el preprocesamiento de datos y el ajuste del modelo para el análisis de expresión génica diferencial de la estructura de datos en formato `DESeqDataSet` dada en `dds`.
+
+Antes de proceder con el análisis es importante definir la categoría de referencia (grupo control) como el primer nivel del principal factor experimental. Ya que el cálculo de los estadísticos como el logaritmo en base 2 de la razón de cambio (logFC) se realizará con respecto a esta categoría. 
+
+Para visualizar los resultados de análisis de expresión génica diferencial se utilizan las funciones
+
+- `results(dds, contrast = c(factor, grupo1, grupo2))`: Muestra una tabla con los principales estadísticos del contraste de comparación de expresión génica del `grupo2` frente al `grupo1` del factor experimental dado en `factor`, realizado do a partir de la estructura de datos en formato `DESeqDataSet` dada en `dds`. 
+
+- `summary(contraste)`: Devuelve un resumen con los genes subexpresados y sobreexpresados significativamente a partir de los resultados del contraste de comparación de expresión génica dados en `contraste`.
 
 
 :::{#exm-DESeq2-analisis-expresion-genica-diferencial}
-A continuación se muestra cómo realizar el análisis de expresión génica diferencial para nuestro ejemplo.
+Siguiendo con nuestro ejemplo, primero definirmos el grupo Basal como la primera categoría del factor `group`.
+
+```{r}
+dds$group <- relevel( dds$group, "Basal" )
+```
+
+A continuación ya podemos realizar el análisis de expresión génica diferencial para nuestro ejemplo.
 
 ```{r}
 dds <- DESeq(dds)
 dds
 ```
+
+A continuación, mostramos los resultados para la comparación del grupo Basal con el grupo LP.
+
+```{r}
+res_B_LP <- results(dds, contrast = c("group", "Basal", "LP"))
+res_B_LP
+summary(res_B_LP)
+```
+
+Después, mostramos los resultados para la comparación del grupo Basal con el grupo ML.
+
+```{r}
+res_B_ML <- results(dds, contrast = c("group", "Basal", "ML"))
+res_B_ML
+summary(res_B_ML)
+```
+
+Y finalmente mostramos los resultados para la comparación del grupo LP con el grupo ML.
+
+```{r}
+res_LP_ML <- results(dds, contrast = c("group", "LP", "ML"))
+res_LP_ML
+summary(res_LP_ML)
+```
 :::
 
-### Visualización de datos
 
+### Visualización de datos
 
 #### Diagrama MA
 
