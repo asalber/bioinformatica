@@ -26,8 +26,8 @@ org.Mm.eg.db
 TxDb.Mmusculus.UCSC.mm10.knownGene
 Mus.musculus
 ggfortify
+Glimma
 matrixStats
 MatrixGenerics
 SummarizedExperiment
 DESeq2
-Glimma

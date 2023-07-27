@@ -46,8 +46,8 @@ format:
   html:
     highlight-style: a11y
     theme:
-      dark: darkly
-      light: flatly
+      dark: [darkly, custom.css]
+      light: [flatly, custom.css]
     html-math-method: mathjax
     code-overflow: wrap
   pdf:

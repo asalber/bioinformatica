@@ -52,7 +52,9 @@ A continuación se muestran las primeras filas de una matriz de frecuencias de e
 library(DEFormats)
 set.seed(123)
 frec <- as.data.frame(simulateRnaSeqData())
-gt(head(frec), rownames_to_stub = T)
+gt(head(frec), rownames_to_stub = T)  |> 
+tab_stubhead(label = "Gen")  |> 
+tab_spanner(label = "Muestras", columns = everything())
 ```
 :::
 
@@ -101,20 +103,20 @@ frecuencias <- read.csv("datos/matriz-frecuencias-genes.csv", row.names = 1)
 head(frecuencias)
 ```
 
-Después cargamos el diseño con los grupos experimentales.
+Después cargamos los datos de las muestras con los factores experimentales.
 
 ```{r}
-diseño <- read.csv("datos/diseño-experimental.csv")
-diseño
+muestras <- read.csv("datos/muestras.csv")
+muestras
 ```
 
 A continuación creamos la estructura de datos `DGEList`.
 
 ```{r}
-# Creación de la estructura de datos DGEList
-dge <- DGEList(counts = frecuencias, group = diseño$Grupo)
-# Añadimos también la línea al diseño
-dge$samples$Línea <- diseño$Línea
+# Creación de la estructura de datos DGEList.
+dge <- DGEList(counts = frecuencias, group = muestras$Grupo)
+# Añadimos también el Lote al dafa frame de las muestras.
+dge$samples$Lote <- muestras$Lote
 dge
 ```
 
@@ -227,19 +229,19 @@ Siguiendo con el mismo ejemplo, calculamos los factores de escalado para cada mu
 
 ```{r}
 dge <- calcNormFactors(dge, method = "TMM")
-dge$samples$norm.factors
+dge$samples
 ```
 
 A continuación se muestran los diagramas de cajas de las distribuciones normalizadas tras aplicar los factores de escalado.
 
 ```{r}
 box_logcpm <- function(dge){
-  diseño <- dge$samples
-  diseño$Muestra <- row.names(diseño)
+  muestras <- dge$samples
+  muestras$Muestra <- row.names(muestras)
   cpm(dge, log = TRUE) |> 
     as.tibble() |>
     pivot_longer(everything(), names_to = "Muestra", values_to = "LogCPM") |>
-    left_join(diseño, by = "Muestra") |> 
+    left_join(muestras, by = "Muestra") |> 
     ggplot(aes(x = Muestra, y = LogCPM, fill = group)) +
     geom_boxplot() +
     labs(title = "Distribución del logaritmo en base 2 de las frecuencias por millón")
@@ -351,7 +353,9 @@ summary(decideTests(exact_B_LP))
 Genes con diferencias más significativas entre el grupo Basal y el grupo LP.
 
 ```{r}
-topTags(exact_B_LP)
+as.data.frame(topTags(exact_B_LP))  |> 
+  gt(rownames_to_stub = T, caption = "Genes más subexpresados o sobreexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
 ```
 
 Resumen con los genes subexpresados y sobreexpresados significativamente entre el grupo Basal y ML.
@@ -363,7 +367,9 @@ summary(decideTests(exact_B_ML))
 Genes con diferencias más significativas entre el grupo Basal y el grupo ML.
 
 ```{r}
-topTags(exact_B_ML)
+as.data.frame(topTags(exact_B_ML))  |> 
+  gt(rownames_to_stub = T, caption = "Genes más subexpresados o sobreexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
 ```
 
 Resumen con los genes subexpresados y sobreexpresados significativamente entre el grupo LP y ML.
@@ -375,7 +381,9 @@ summary(decideTests(exact_LP_ML))
 Genes con diferencias más significativas entre el grupo LP y el grupo ML.
 
 ```{r}
-topTags(exact_LP_ML)
+as.data.frame(topTags(exact_LP_ML))  |> 
+  gt(rownames_to_stub = T, caption = "Genes más subexpresados o sobreexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
 ```
 :::
 
@@ -387,7 +395,7 @@ Otra alternativa, para diseños experimentales que incluye más de un factor, es
 Continuando con el mismo ejemplo, definimos la matriz de diseño del modelo.
 
 ```{r}
-diseño <- model.matrix(~ 0 + dge$samples$group + dge$samples$Línea)
+diseño <- model.matrix(~ 0 + dge$samples$group + dge$samples$Lote)
 colnames(diseño) <- gsub("dge\\$samples\\$group", "", colnames(diseño))
 colnames(diseño) <- gsub("dge\\$samples\\$", "", colnames(diseño))
 diseño
@@ -427,7 +435,9 @@ Y, a continuación, los contrastes por pares. En primer lugar, comparamos Basal 
 contraste <- makeContrasts(Basal - LP, levels = diseño) 
 glmQL_B_LP <- glmQLFTest(modelo, contrast = contraste)
 summary(decideTests(glmQL_B_LP))
-topTags(glmQL_B_LP)
+as.data.frame(topTags(glmQL_B_LP))  |> 
+  gt(rownames_to_stub = T, caption = "Genes más subexpresados o sobreexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
 ```
 
 A continuación comparamos Basal con ML.
@@ -435,8 +445,10 @@ A continuación comparamos Basal con ML.
 ```{r}
 contraste <- makeContrasts(Basal - ML, levels = diseño) 
 glmQL_B_ML <- glmQLFTest(modelo, contrast = contraste)
-summary(decideTests(glmQL_B_LP))
-topTags(glmQL_B_ML)
+summary(decideTests(glmQL_B_ML))
+as.data.frame(topTags(glmQL_B_ML))  |> 
+  gt(rownames_to_stub = T, caption = "Genes más subexpresados o sobreexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
 ```
 
 Y ahora comparamos LP con ML.
@@ -444,21 +456,25 @@ Y ahora comparamos LP con ML.
 ```{r}
 contraste <- makeContrasts(LP - ML, levels = diseño) 
 glmQL_LP_ML <- glmQLFTest(modelo, contrast = contraste)
-summary(decideTests(glmQL_B_LP))
-topTags(glmQL_LP_ML)
+summary(decideTests(glmQL_LP_ML))
+as.data.frame(topTags(glmQL_LP_ML))  |> 
+  gt(rownames_to_stub = T, caption = "Genes más subexpresados o sobreexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
 ```
 
 Por último buscamos los genes con una expresión diferente en los tres grupos experimentales.
 
 ```{r}
 glmQL_all <- glmQLFTest(modelo, coef = 2:3)
-topTags(glmQL_all)
+as.data.frame(topTags(glmQL_all))  |> 
+  gt(rownames_to_stub = T, caption = "Genes más subexpresados o sobreexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
 ```
 :::
 
 ### Visualización de resultados
 
-Existen diferentes diagramas para representar los resultados del análisis génico diferencial. En esta sección presentamos dos de los diagramas más utlizados, el diagrama MD y el diagrama de volcán. 
+Existen diferentes diagramas para representar los resultados del análisis génico diferencial. En esta sección presentamos dos de los diagramas más utilizados, el diagrama MD y el diagrama de volcán. 
 
 #### Diagrama MD
 
@@ -498,7 +514,7 @@ A menudo, los puntos en el gráfico de volcán están coloreados o resaltados se
 
 `edgR` no incorpora una función para realizar este tipo de diagramas, así que utilizaremos la siguiente función del paquete `Glimma`
 
-- `glimmaVolcano(modelo, dge = dge)`: Realiza diagrama de volcán del modelo ajustado `fit` sobre la estructura de datos del tipo DGEList dada en `dge`.
+- `glimmaVolcano(contraste, dge = dge)`: Realiza diagrama de volcán del contraste de comparación de expresión génica dado en `contraste`, realizado sobre la estructura de datos del tipo `DGEList` dada en `dge`.
 
 En el capítulo Diagramas de Volcán se explica con más detalle su creación con el paquete `ggplot2`.
 
@@ -552,10 +568,10 @@ Siguiendo con el mismo ejemplo de la sección anterior, podemos aprovechar la es
 ```{r, message = F}
 library(DESeq2)
 dds <- DESeqDataSetFromMatrix(
-  countData = dge$counts,
-  colData = dge$samples,
-  rowData = dge$genes,
-  design = ~group
+  countData = frecuencias,
+  colData = muestras,
+  rowData = genes,
+  design = ~ Grupo
 )
 dds
 ```
@@ -566,28 +582,30 @@ Si disponemos de los datos en el formato de la estructura de datos `DGEList`, es
 - `as.DESeqDataSet(dge)`: Devuelve una estructura de datos del tipo `DESeqDataSet` con los datos de la estructura de datos `DGEList` dada en `dge`.
 
 :::{#exm-deseq2-carga-datos2}
-```{r}
+```r
 library(DEFormats)
 dds <- as.DESeqDataSet(dge)
-dds
 ```
 :::
 
-Una vez creada la estructura de datos, podemos acceder a la información de las muestras con la función
+Una vez creada la estructura de datos, podemos acceder a la información que contiene con las siguientes funciones:
 
+- `counts(dds)`: Devuelve un data frame con las frecuencias de expresión génica de la estructura de datos en formato `DESEqDataSet` dada en `dds`.
+  
 - `colData(dds)`: Devuelve un data frame con la información de las muestras (columnas) de la estructura de datos en formato `DESEqDataSet` dada en `dds`.
 
-Y a la información de los genes con la función
-
 - `rowData(dds)`: Devuelve un data frame con la información de los genes (filas) de la estructura de datos en formato `DESEqDataSet` dada en `dds`.
-
-También podemos mostrar el diseño experimental con la función
 
 - `design(dds)`: Devuelve la fórmula del diseño experimental de la estructura de datos en formato `DESEqDataSet` dada en `dds`.
 
 :::{#exm-deseq2-datos-muestras-genes}
+Para comprobar que se creado bien la estructura de datos, mostramos la información que contiene. Primero la matriz de frecuencias de expresión génica.
 
-Mostramos la información de las muestras del ejemplo.
+```{r}
+head(counts(dds))
+```
+
+Después, la información de las muestras del ejemplo.
 
 ```{r}
 colData(dds)
@@ -637,16 +655,16 @@ Antes de proceder con el análisis es importante definir la categoría de refere
 
 Para visualizar los resultados de análisis de expresión génica diferencial se utilizan las funciones
 
-- `results(dds, contrast = c(factor, grupo1, grupo2))`: Muestra una tabla con los principales estadísticos del contraste de comparación de expresión génica del `grupo2` frente al `grupo1` del factor experimental dado en `factor`, realizado do a partir de la estructura de datos en formato `DESeqDataSet` dada en `dds`. 
+- `results(dds, contrast = c(factor, grupo1, grupo2), alpha = 0.05)`: Muestra una tabla con los principales estadísticos del contraste de comparación de expresión génica del `grupo2` frente al `grupo1` del factor experimental dado en `factor`, realizado a partir de la estructura de datos en formato `DESeqDataSet` dada en `dds`. Si no se indica el parámetro `contrast`, por defecto se muestra el resultado del contraste de comparación del último nivel del factor experimental frente al primero. El parámetro `alpha` indica el nivel de significación del contraste, des decir, probabilidad por debajo de la cuál se considera significativo el p-valor ajustado.
 
 - `summary(contraste)`: Devuelve un resumen con los genes subexpresados y sobreexpresados significativamente a partir de los resultados del contraste de comparación de expresión génica dados en `contraste`.
 
 
 :::{#exm-DESeq2-analisis-expresion-genica-diferencial}
-Siguiendo con nuestro ejemplo, primero definirmos el grupo Basal como la primera categoría del factor `group`.
+Siguiendo con nuestro ejemplo, primero definiremos el grupo Basal como la primera categoría del factor `group`.
 
 ```{r}
-dds$group <- relevel( dds$group, "Basal" )
+dds$Grupo <- relevel(dds$Grupo, "Basal")
 ```
 
 A continuación ya podemos realizar el análisis de expresión génica diferencial para nuestro ejemplo.
@@ -659,49 +677,172 @@ dds
 A continuación, mostramos los resultados para la comparación del grupo Basal con el grupo LP.
 
 ```{r}
-res_B_LP <- results(dds, contrast = c("group", "Basal", "LP"))
-res_B_LP
+res_B_LP <- results(dds, contrast = c("Grupo", "Basal", "LP"))
+# Resumen de genes subexpresados y sobreexpresados.
 summary(res_B_LP)
+# Genes subexpresados significativamente ordenados de menor a mayor logFC.
+as.data.frame(res_B_LP)  |> 
+  filter(log2FoldChange < 0 & padj < 0.05) |>
+  arrange(log2FoldChange)  |> 
+  head(10) |> 
+  gt(rownames_to_stub = T, caption = "10 genes más subexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
+# Genes sobrexpresados significativamente ordenados de mayor a menor logFC.
+as.data.frame(res_B_LP)  |> 
+  filter(log2FoldChange > 0 & padj < 0.05) |>
+  arrange(desc(log2FoldChange))  |> 
+  head(10) |> 
+  gt(rownames_to_stub = T, caption = "10 genes más sobreexpresados signiticativamente")   |> 
+  tab_stubhead(label = "Gen")
 ```
 
 Después, mostramos los resultados para la comparación del grupo Basal con el grupo ML.
 
 ```{r}
-res_B_ML <- results(dds, contrast = c("group", "Basal", "ML"))
-res_B_ML
+res_B_ML <- results(dds, contrast = c("Grupo", "Basal", "ML"))
+# Resumen de genes subexpresados y sobreexpresados.
 summary(res_B_ML)
+# Genes subexpresados significativamente ordenados de menor a mayor logFC.
+as.data.frame(res_B_LP)  |> 
+  filter(log2FoldChange < 0 & padj < 0.05) |>
+  arrange(log2FoldChange)  |> 
+  head(10) |> 
+  gt(rownames_to_stub = T, caption = "10 genes más subexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
+# Genes sobrexpresados significativamente ordenados de mayor a menor logFC.
+as.data.frame(res_B_LP)  |> 
+  filter(log2FoldChange > 0 & padj < 0.05) |>
+  arrange(desc(log2FoldChange))  |> 
+  head(10) |> 
+  gt(rownames_to_stub = T, caption = "10 genes más sobreexpresados signiticativamente") |> 
+  tab_stubhead(label = "Gen")
 ```
 
 Y finalmente mostramos los resultados para la comparación del grupo LP con el grupo ML.
 
 ```{r}
-res_LP_ML <- results(dds, contrast = c("group", "LP", "ML"))
-res_LP_ML
+res_LP_ML <- results(dds, contrast = c("Grupo", "LP", "ML"))
+# Resumen de genes subexpresados y sobreexpresados.
 summary(res_LP_ML)
+# Genes subexpresados significativamente ordenados de menor a mayor logFC.
+as.data.frame(res_LP_ML)  |> 
+  filter(log2FoldChange < 0 & padj < 0.05) |>
+  arrange(log2FoldChange)  |> 
+  head(10) |> 
+  gt(rownames_to_stub = T, caption = "10 genes más subexpresados signiticativamente")  |> 
+  tab_stubhead(label = "Gen")
+# Genes sobrexpresados significativamente ordenados de mayor a menor logFC.
+as.data.frame(res_LP_ML)  |> 
+  filter(log2FoldChange > 0 & padj < 0.05) |>
+  arrange(desc(log2FoldChange))  |> 
+  head(10) |> 
+  gt(rownames_to_stub = T, caption = "10 genes más sobreexpresados signiticativamente") |> 
+  tab_stubhead(label = "Gen")
 ```
 :::
 
-
 ### Visualización de datos
 
-#### Diagrama MA
+#### Diagrama MD
+
+Este diagrama consiste en un mapa de puntos donde cada punto corresponde a un gen. El eje X representa la media del logaritmo de las frecuencias por millón (lcpm) y el eje Y representa el logaritmo en base 2 de la razón de cambio (logFC). Habitualmente, los genes subexpresados significativamente se dibujan en color azul, mientras que los sobreexpresados se dibujan en color rojo.
+
+`DESeq2` no incorpora una función para realizar este tipo de diagramas, así que utilizaremos la siguiente función del paquete `Glimma`
+
+- `glimmaMA(dds, groups = factor)`: Realiza diagrama MD del contraste de comparación de expresión génica realizado sobre la estructura de datos del tipo `DESeqDataSet` dada en `dds`, con los grupos experimentales definidos en `factor`. 
+
+:::{.callout-warning}
+La función `glimmaMA` muestra el diagrama de comparación para la comparación del último nivel del factor experimental con el primero. Si tenemos más de dos grupos experimentales hay que filtrar previamente la estructura de datos en formato `DESeqDataSet` para que solo incluya los dos grupos a comparar.
+:::
 
 :::{#exm-DESeq2-diagrama-MA}
 ```{r}
-glimmaMA(dds)
+glimmaMA(dds, groups = dds$Grupo)
 ```
 :::
 
 #### Diagrama de volcán
 
+Un diagrama de volcán es una representación gráfica utilizada en Bioinformática para visualizar los resultados del análisis de expresión génica diferencial u otros tipos de análisis de datos ómicos de alto rendimiento, como Proteómica o Metabolómica.
+
+En un diagrama de volcán, cada punto de datos representa un gen (o una proteína/metabolito) del conjunto de datos. El eje x muestra el cambio logarítmico o tamaño del efecto, que mide la magnitud del cambio en la expresión entre dos condiciones (por ejemplo, tratamiento vs. control). El eje y muestra la significación estadística, a menudo representada como el logaritmo negativo del valor p. Un valor p más pequeño indica una mayor significación estadística.
+
+A menudo, los puntos en el gráfico de volcán están coloreados o resaltados según su significación estadística y cambio en la expresión. Por lo general, los genes significativamente sobreexpresados se representan en rojo, los genes significativamente subexpresados en azul y los genes no significativamente expresados en gris o negro. Cuanto más significativos sean estadísticamente y mayor sea el cambio en la expresión, más alejados estarán los puntos del centro del gráfico.
+
+`DESeq2` no incorpora una función para realizar este tipo de diagramas, pero podemos usar la siguiente función del paquete `Glimma`
+
+- `glimmaVolcano(dds, groups = factor)`: Realiza diagrama de volcán del contraste de comparación de expresión génica realizado sobre la estructura de datos del tipo `DESeqDataSet` dada en `dds`, con los grupos experimentales definidos en `factor`. 
+
+:::{.callout-warning}
+La función `glimmaVolcano` muestra el diagrama de comparación para la comparación del último nivel del factor experimental con el primero. Si tenemos más de dos grupos experimentales hay que filtrar previamente la estructura de datos en formato `DESeqDataSet` para que solo incluya los dos grupos a comparar.
+:::
+
+En el capítulo Diagramas de Volcán se explica con más detalle su creación con el paquete `ggplot2`.
+
 :::{#exm-DESeq2-diagrama-volcan}
+Dibujamos el diagrama de volcán interactivo.
+
 ```{r}
-glimmaVolcano(dds)
+glimmaVolcano(dds, groups = dds$Grupo)
+```
+
+Obsérvese que este diagrama solo muestra la comparación del último grupo experimental (ML) con respecto al grupo de referencia (Basal). 
+
+A continuación creamos los diagrams de volcán para todos los contrastes por pares, mediante el paquete `ggplot`. En primer lugar para la comparación de LP frente a Basal.
+
+```{r funcion-digrama-volcan}
+# Crear nueva columna con categorías de expresión génica.
+diagramaVolcan <- function(contraste, alpha = 0.05, minlogFC = 2){
+  colores <- c("dodgerblue3", "gray50", "firebrick3")
+  df <- as.data.frame(contraste)  |> na.omit()
+  rangex <- max(-min(df$log2FoldChange, na.rm = T), max(df$log2FoldChange, na.rm = T))
+  maxy <- max(-log10(df$padj), na.rm = T)
+  vplot <- df |>
+      mutate(Expresión = case_when(
+          log2FoldChange >= log2(minlogFC) & padj <= alpha ~ "Up", 
+          log2FoldChange <= log2(1/minlogFC) & padj <= alpha ~ "Down",
+          TRUE ~ "NC"))  |> 
+  # Definimos los colores para los genes subexpresados, normales y sobreexpresados.
+    ggplot(aes(x = log2FoldChange, y = -log10(padj))) + 
+    geom_point(aes(color = Expresión)) +
+    scale_color_manual(values = colores) +
+    # Añadimos las líneas de la razón de cambio.
+    geom_vline(xintercept = c(log2(1/minlogFC), log2(minlogFC)), linetype = "dashed") +
+    # Etiquetamos las líneas de la razón de cambio.
+    annotate("text", x = log2(1/minlogFC), y = maxy, label = paste0("FC=1/", minlogFC), vjust = 0) +
+    annotate("text", x = log2(2), y = maxy, label = paste0("FC=", minlogFC), vjust = 0) +
+    # Añadimos las líneas de los p-valores.
+    geom_hline(yintercept = -log10(alpha), linetype = "dashed") +
+    # Etiquetamos las líneas de los p-valores.
+    annotate("text", x = rangex+0.1, y = -log10(alpha), label = paste0("p=", alpha), hjust = 0) +
+    theme(plot.margin = unit(c(2, 1, 1, 1), "lines")) +
+    coord_cartesian(xlim = c(-rangex, rangex), ylim = c(0, maxy), expand = FALSE, clip = "off")
+  return(vplot)
+}
+```
+
+```{r}
+diagramaVolcan(res_B_LP, alpha = 0.05, minlogFC = 2)
+```
+
+A continuación dibujamos el diagrama de volcán de ML frente a Basal.
+
+```{r}
+diagramaVolcan(res_B_ML, alpha = 0.05, minlogFC = 2)
+```
+
+Y finalmente el diagrama de volcán de ML frente a LP.
+
+```{r}
+diagramaVolcan(res_LP_ML, alpha = 0.05, minlogFC = 2)
 ```
 :::
+
 
 ## Referencias
 
 - Orchestrating Single-Cell Analysis with Bioconductor. (s. f.). Recuperado 12 de junio de 2023, de https://github.com/LTLA/OSCA
 
 - Law, Charity, et al. [RNA-seq analysis is easy as 1-2-3 with limma, Glimma and edgeR](https://bioconductor.org/packages/release/workflows/vignettes/RNAseq123/inst/doc/limmaWorkflow.html).
+
+
